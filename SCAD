@@ -1,0 +1,111 @@
+
+
+#######################################variable selection by SCAD
+
+#################################################test & train
+
+mydata <- my.data
+dim(mydata)
+b <- dim(mydata)[2] 
+xx<- mydata[,-b]
+yy<- mydata[,b]
+#################################################
+## fit group SCAD penalized logistic regression##
+no.rep <- 1000
+
+SCAD.coef <- matrix(NA,ncol=b,nrow=no.rep)
+
+for (ii in 1:no.rep) 
+{
+  cv1fit <- cv.grpreg(xx, yy, penalty="grSCAD", family="binomial")
+  SCAD.coef[ii,]<- coef(cv1fit) ## Beta at minimum CVE
+  print(ii)
+}
+
+freq.SCAD <-SCAD.coef
+for (jj in 1:no.rep) 
+{
+  freq.SCAD[jj,which(freq.SCAD[jj,]!=0)] <- 1
+}
+col.sum<-colSums(freq.SCAD)
+#col.sum <- col.sum[-1]
+#SCAD.coef <- SCAD.coef[,-1]
+betaaa<-colMeans(SCAD.coef)
+mydata.x <- mydata[,-(b)]
+
+vvv <- col.sum[-1]
+colnames(mydata.x[,vvv==1000])
+bet <- betaaa[-1]  
+nz.beta <- betaaa[col.sum==1000]
+
+
+new.data <- data.frame(mydata.x[,vvv==1000])
+new.data$waist <- mydata[,b+1]
+colnames(df)
+
+model <- glm(waist ~Age+SBheight+SBcurvature+deskH+
+               Sblackbord+accident+familymember+Methodebag+absentWaist+rula+MTV+
+               timebackpack
+             ,family=binomial(link='logit'),data=df)
+mmm <- summary(model)
+
+oddsratio95ci <- data.frame(cbind(exp(model$coefficients),exp(model$coefficients -1.96*mmm$coefficients[,2]),
+                                  
+                                  exp(model$coefficients +1.96*mmm$coefficients[,2])))
+
+colnames(oddsratio95ci) <- c("OR","Lower Bound" , "Upper Bound")
+
+
+
+
+#################################################
+###################bootstrap#####################
+no.rep=1000
+SCAD.coef.boot <- matrix(NA,ncol=(ncol(new.data)),nrow=no.rep)
+
+for (kk in 1:no.rep) 
+{
+  data.boot <- sample(1:nrow(df), size =  nrow(df),replace = T)
+  data_b <- df[data.boot, ]
+  
+  
+  #x.b <- as.matrix(data_b[1:ncol(new.data)])
+  # y.b <- data_b$GHQ28
+  
+  model <- glm(waist ~Age+SBheight+SBcurvature+deskH+
+                 Sblackbord+accident+familymember+Methodebag+absentWaist+rula+MTV+
+                 timebackpack
+               ,family=binomial(link='logit'),data=data_b)
+  # summary(model)
+  #cv2fit <- grpreg(x.b, y.b, group, penalty="grSCAD",lambda=0, family="binomial")
+  SCAD.coef.boot[kk,]<- coef(model) ## Beta at minimum CVE
+  print(kk)
+}
+
+
+
+
+
+##################se bootstrap###################
+se.SCAD.boot <- c()
+for (jj in 1:ncol(SCAD.coef.boot)){
+  se.SCAD.boot[jj] <- sd(SCAD.coef.boot[,jj])
+}
+
+################### z score #####################
+zz<-nz.beta/(se.SCAD.boot)
+names(zz)<-c("Intercept",colnames(new.data[,-24]))
+#names(zz[2:24])<-colnames(new.data[,-24])
+#name<-append(names(zz)[1],names(zz)[-1])
+
+################### p-value #####################
+p.value<-2*pnorm(-abs(zz))
+
+#################################################
+result<-matrix(0,ncol=7,nrow=length(zz))
+result[,1]<-nz.beta
+result[,2]<-se.SCAD.boot
+result[,3]<-zz
+options(scipen = 999)
+result[,4]<-p.value
+result[,5]<-exp(nz.beta)
